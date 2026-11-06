@@ -1,0 +1,7 @@
+pygame==2.6.1
+pytmx
+gymnasium
+numpy
+torch
+stable-baselines3
+tensorboard
