@@ -10,6 +10,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
 
 from callbacks import make_callbacks
+from champion import maybe_promote
 from mario_env import MarioEnv
 
 RL_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -25,7 +26,7 @@ PPO_PARAMS = dict(
     gamma=0.99,
     gae_lambda=0.95,
     clip_range=0.2,
-    ent_coef=0.01,
+    ent_coef=0.03,  # mas exploracion: evita que la politica colapse a una accion
     vf_coef=0.5,
     max_grad_norm=0.5,
 )
@@ -43,6 +44,10 @@ def parse_args():
     p.add_argument("--run-name", type=str, default=None)
     p.add_argument("--resume", type=str, default=None)
     p.add_argument("--no-norm-reward", action="store_true")
+    p.add_argument(
+        "--no-champion", action="store_true",
+        help="No comparar ni actualizar el campeon global al terminar.",
+    )
     return p.parse_args()
 
 
@@ -105,7 +110,7 @@ def main():
     with open(os.path.join(run_dir, "config.json"), "w") as f:
         json.dump(config, f, indent=2)
 
-    callbacks = make_callbacks(
+    callbacks, metrics_cb = make_callbacks(
         save_path=run_dir,
         checkpoint_freq=max(1, 100_000 // args.n_envs),
         best_check_freq=align_to_envs(10_000, args.n_envs),
@@ -134,6 +139,24 @@ def main():
     print(f"[train] listo en {(time.time() - start) / 60:.1f} min")
     print(f"[train] modelo final: {final_path}.zip")
     print(f"[train] mejor modelo: {os.path.join(run_dir, 'best_model')}.zip")
+
+    # --- Carril campeon global ------------------------------------------
+    # Comparamos las metricas de esta corrida con el campeon historico y,
+    # si lo superamos (mas victorias; desempate por avance), lo reemplazamos.
+    # Usamos best_model si existe (suele ser mejor que el final); si no, final.
+    if not args.no_champion:
+        candidate_meta = metrics_cb.current_metrics()
+        best_model_path = os.path.join(run_dir, "best_model.zip")
+        candidate_model = best_model_path if os.path.exists(best_model_path) else final_path
+        vecnorm_path = os.path.join(run_dir, "vecnormalize.pkl") if use_norm else None
+        maybe_promote(
+            models_dir=MODELS_DIR,
+            model_src=candidate_model,
+            vecnorm_src=vecnorm_path,
+            candidate_meta=candidate_meta,
+            run_name=run_name,
+        )
+
     return 0
 
 

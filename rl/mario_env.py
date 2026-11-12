@@ -27,12 +27,15 @@ ACTIONS = [
 class MarioEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
 
-    def __init__(self, frame_skip=4, max_steps=3000, render_mode=None):
+    def __init__(self, frame_skip=4, max_steps=3000, render_mode=None,
+                 max_stuck_steps=120):
         super().__init__()
 
         self.frame_skip = frame_skip      # ticks de juego por cada accion del agente
-        self.max_steps = max_steps        # tope de acciones por episodio (evita quedarse colgado)
+        self.max_steps = max_steps        # tope de acciones por episodio
         self.render_mode = render_mode
+        # Pasos seguidos sin batir el record de avance antes de cortar el episodio por estancamiento.
+        self._max_stuck_steps = max_stuck_steps
 
         # Reloj simulado en base a cuantos milisegundos equivalen a cada tick
         self._sim_ms_per_tick = 10
@@ -41,8 +44,9 @@ class MarioEnv(gym.Env):
         self.action_space = spaces.Discrete(len(ACTIONS)) #Listado de acciones
 
         obs_dim = self._obs_dim()
+
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
+            low=-5.0, high=5.0, shape=(obs_dim,), dtype=np.float32
         )
 
         self.core = None
@@ -54,9 +58,17 @@ class MarioEnv(gym.Env):
         self._bootstrap_game_module()
 
     def _bootstrap_game_module(self):
-        # Headless
-        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+        # En modo "human" queremos ventana real y sonido; en cualquier otro
+        # modo (entrenamiento) corremos headless para ir a maxima velocidad.
+        if self.render_mode == "human":
+            # Ventana visible: NO forzamos el driver dummy de video.
+            # (El audio lo dejamos activo para oir el juego.)
+            os.environ.pop("SDL_VIDEODRIVER", None)
+            os.environ.pop("SDL_AUDIODRIVER", None)
+        else:
+            # Headless: sin ventana ni audio.
+            os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+            os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 
         if GAME_DIR not in sys.path:
@@ -68,6 +80,11 @@ class MarioEnv(gym.Env):
 
         # Tiempo con el reloj somulado
         pg.time.get_ticks = lambda: self._sim_clock
+
+        # Soporte para el modo visible ("human").
+        self._human_clock = pg.time.Clock()  # limita FPS en la ventana
+        self._human_fps = 60                  # velocidad de reproduccion
+        self._human_quit = False              # True si cierran la ventana
 
     def _new_core(self):
         from Core import Core
@@ -90,6 +107,16 @@ class MarioEnv(gym.Env):
         player = self.core.get_map().get_player()
         self._last_x = float(player.rect.x)
         self._max_x = float(player.rect.x)
+
+        # Contadores para el reward de progreso/estancamiento/tiempo.
+        self._best_x = float(player.rect.x)   # mejor avance alcanzado (record)
+        self._stuck_steps = 0                 # pasos seguidos sin batir el record
+        self._last_score = int(player.score)  # score previo, para premiar su aumento
+
+        # Bloques que entregan power-up (hongo/flor). Guardamos las referencias
+        # una vez para premiar el momento en que Mario los activa (golpea).
+        self._bonus_blocks = self._find_bonus_blocks()
+        self._bonus_activated_prev = 0        # cuantos llevaba activados
 
         obs = self._get_obs()
         info = self._get_info()
@@ -116,6 +143,15 @@ class MarioEnv(gym.Env):
             truncated = True
 
         reward, status = self._compute_reward(terminated)
+
+        # Fin por estancamiento: si lleva demasiado sin avanzar, cortamos el
+        # episodio como si "muriera". Evita que quedarse quieto sea viable y
+        # refuerza el objetivo de terminar en el menor tiempo posible.
+        if not terminated and self._stuck_steps >= self._max_stuck_steps:
+            terminated = True
+            status = "death"
+            reward -= 50.0  # mismo castigo que una muerte normal
+
         obs = self._get_obs()
         info = self._get_info()
         info["status"] = status
@@ -134,6 +170,21 @@ class MarioEnv(gym.Env):
         self._sim_clock += self._sim_ms_per_tick
         self.core.update()
 
+        # Modo "human" para ver la repeticion a 60fps, de resto se omite
+        if self.render_mode == "human":
+            self._draw_human_frame()
+
+    def _draw_human_frame(self):
+        pg = self._pg
+        # Procesar eventos de la ventana para que el SO no la marque "colgada"
+        # y para poder cerrarla con la X.
+        for e in pg.event.get():
+            if e.type == pg.QUIT:
+                self._human_quit = True
+        self.core.render()
+        # Limita la velocidad a FPS jugables.
+        self._human_clock.tick(self._human_fps)
+
     def _episode_status(self):
         #Estado actual del juego
         game_map = self.core.get_map()
@@ -147,34 +198,79 @@ class MarioEnv(gym.Env):
             return "death"
         return "running"
 
+    def _find_bonus_blocks(self):
+        #Localizacion de bloques de poderes 
+        game_map = self.core.get_map()
+        blocks = []
+        for column in game_map.map:
+            for block in column:
+                if block != 0 and getattr(block, "typeID", None) == 22:
+                    if getattr(block, "bonus", None) == "mushroom":
+                        blocks.append(block)
+        return blocks
+
+    def _count_bonus_activated(self):
+        #Cuantos bloques de poderes han sido activados
+        return sum(1 for b in self._bonus_blocks if getattr(b, "isActivated", False))
+
     def _compute_reward(self, terminated):
         #Sistema de recompensas
-        player = self.core.get_map().get_player()
+        game_map = self.core.get_map()
+        player = game_map.get_player()
         x = float(player.rect.x)
 
         status = self._episode_status()
 
-        # Recompensa principal: progreso hacia la derecha.
+        # 1) Progreso instantaneo hacia la derecha.
         dx = x - self._last_x
         self._last_x = x
         self._max_x = max(self._max_x, x)
-        reward = dx * 0.1
+        reward = dx * 1.0
 
-        # Castigo por existir.
-        reward -= 0.01
+        # 2) Bono por batir el record de avance del episodio. Evita que se quede quieto
+        if x > self._best_x:
+            reward += (x - self._best_x) * 1.0
+            self._best_x = x
+            self._stuck_steps = 0
+        else:
+            # Si no mejora el record, cuenta como estancamiento.
+            self._stuck_steps += 1
+
+        # 3) Castigo por existir
+        reward -= 0.1
+
+        # 4) Castigo adicional creciente por estancarse.
+        if self._stuck_steps > 0:
+            reward -= 0.05
+
+        # 5) Bono por PUNTUACION ganada (score)
+        score = int(player.score)
+        d_score = score - self._last_score
+        self._last_score = score
+        if d_score > 0:
+            reward += d_score * 0.05
+
+        # 5b) Bono por GOLPEAR un bloque de power-up (sube score)
+        bonus_now = self._count_bonus_activated()
+        if bonus_now > self._bonus_activated_prev:
+            reward += 15.0 * (bonus_now - self._bonus_activated_prev)
+            self._bonus_activated_prev = bonus_now
 
         if status == "win":
-            reward += 500.0 #Recompensa por ganar
+            # 6) Bono base por ganar mas acumulado bono por rapidez
+            time_left = float(getattr(game_map, "time", 0))
+            reward += 500.0 + time_left * 5.0
         elif status == "death":
-            reward -= 50.0 #Castigo por perder
+            reward -= 50.0  # castigo por morir
 
         return reward, status
 
     def _obs_dim(self):
-        # Tamaño vector de observacion. 6 estados del jugador + Campo de vision del agente
+        # Tamaño del vector de observacion: 6 escalares del jugador + grid de mobs/powerups
         self._grid_rows = 7
         self._grid_cols = 9
-        return 6 + self._grid_rows * self._grid_cols
+        cells = self._grid_rows * self._grid_cols
+        return 6 + cells + cells
 
     def _get_obs(self):
         game_map = self.core.get_map()
@@ -192,10 +288,13 @@ class MarioEnv(gym.Env):
             player.powerLVL / 2.0,             # 0 small, 0.5 big, 1.0 fire
         ], dtype=np.float32)
 
-        # Grid local de bloques solidos alrededor del agente.
-        grid = self._local_grid(game_map, player)
-        #Vector unificado con los escalares del jugador y el campo de vision en su momento
-        return np.concatenate([scalars, grid.flatten()]).astype(np.float32) 
+        grid = self._local_grid(game_map, player) #grid bloques solidos
+        mob_grid = self._mob_grid(game_map, player) #grid de enemigos y powerups
+
+        #Vector unificado: escalares + bloques + mobs (campo de vision completo)
+        return np.concatenate([
+            scalars, grid.flatten(), mob_grid.flatten()
+        ]).astype(np.float32)
 
     def _local_grid(self, game_map, player):
 
@@ -222,6 +321,35 @@ class MarioEnv(gym.Env):
                         grid[r, c] = 1.0
         return grid
 
+    # Clases de mob consideradas PELIGRO (el agente debe esquivar o pisar).
+    _ENEMY_NAMES = ("Goombas", "Koopa")
+    # Clases de mob consideradas BUENAS (el agente deberia buscar).
+    _GOODIE_NAMES = ("Mushroom", "Flower")
+
+    def _mob_grid(self, game_map, player):
+        #Identificador de enemigos y poderes en el campo de vision
+        grid = np.zeros((self._grid_rows, self._grid_cols), dtype=np.float32)
+
+        px = player.rect.x // 32
+        py = player.rect.y // 32
+        half_r = self._grid_rows // 2
+        half_c = self._grid_cols // 2
+
+        for mob in getattr(game_map, "mobs", []):
+            rect = getattr(mob, "rect", None)
+            if rect is None:
+                continue
+            # Posicion del mob relativa a Mario, en celdas de la ventana.
+            c = (rect.x // 32) - px + half_c
+            r = (rect.y // 32) - py + half_r
+            if 0 <= r < self._grid_rows and 0 <= c < self._grid_cols:
+                name = type(mob).__name__
+                if name in self._ENEMY_NAMES:
+                    grid[r, c] = 1.0
+                elif name in self._GOODIE_NAMES:
+                    grid[r, c] = -1.0
+        return grid
+
     def _get_info(self):
         player = self.core.get_map().get_player()
         return {
@@ -235,6 +363,11 @@ class MarioEnv(gym.Env):
         }
 
     def render(self):
+        # En modo "human" el frame ya se dibuja dentro de cada tick del juego
+        if self.render_mode == "rgb_array":
+            # Devuelve el frame actual como arreglo
+            frame = self._pg.surfarray.array3d(self.core.screen)
+            return np.transpose(frame, (1, 0, 2))
         return None
 
     def close(self):

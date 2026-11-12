@@ -1,0 +1,114 @@
+{
+  "proyecto": "Final-Project-AI / Mario",
+  "algoritmo": "PPO",
+  "modelo": "C:\\Users\\alsoc\\OneDrive - Universidad EAFIT\\Semestre 5\\Inteligencia Artificial\\Super-AI-bruh\\models\\run_v8\\best_model.zip",
+  "corrida": "run_v8",
+  "config_entrenamiento": {
+    "timesteps": 3000000,
+    "n_envs": 8,
+    "seed": 0,
+    "frame_skip": 4,
+    "max_steps": 3000,
+    "run_name": "run_v8",
+    "resume": null,
+    "no_norm_reward": false,
+    "no_champion": false,
+    "ppo_params": {
+      "learning_rate": 0.00025,
+      "n_steps": 512,
+      "batch_size": 256,
+      "n_epochs": 10,
+      "gamma": 0.99,
+      "gae_lambda": 0.95,
+      "clip_range": 0.2,
+      "ent_coef": 0.03,
+      "vf_coef": 0.5,
+      "max_grad_norm": 0.5
+    },
+    "policy_kwargs": {
+      "net_arch": {
+        "pi": [
+          64,
+          64
+        ],
+        "vf": [
+          64,
+          64
+        ]
+      }
+    }
+  },
+  "config_evaluacion": {
+    "episodios_por_agente": 30,
+    "seed_base": 42,
+    "frame_skip": 4,
+    "max_steps": 3000,
+    "ppo_deterministico": true,
+    "baseline_aleatoria": false,
+    "recompensas_sin_normalizacion": true
+  },
+  "resumen": {
+    "PPO": {
+      "episodios": 30,
+      "victorias": 0,
+      "muertes": 30,
+      "truncados": 0,
+      "otros": 0,
+      "tasa_victorias": 0.0,
+      "ic_95_tasa_victorias_wilson": [
+        0.0,
+        0.1135
+      ],
+      "recompensa": {
+        "media": 2915.8999,
+        "desviacion_estandar": 0.0
+      },
+      "avance_maximo_px": {
+        "media": 1620.0,
+        "desviacion_estandar": 0.0
+      },
+      "pasos": {
+        "media": 189.0,
+        "desviacion_estandar": 0.0
+      },
+      "monedas": {
+        "media": 1.0,
+        "desviacion_estandar": 0.0
+      },
+      "puntuacion": {
+        "media": 200.0,
+        "desviacion_estandar": 0.0
+      },
+      "acciones": {
+        "0": {
+          "cantidad": 0,
+          "proporcion": 0.0
+        },
+        "1": {
+          "cantidad": 180,
+          "proporcion": 0.0317
+        },
+        "2": {
+          "cantidad": 300,
+          "proporcion": 0.0529
+        },
+        "3": {
+          "cantidad": 3090,
+          "proporcion": 0.545
+        },
+        "4": {
+          "cantidad": 1290,
+          "proporcion": 0.2275
+        },
+        "5": {
+          "cantidad": 660,
+          "proporcion": 0.1164
+        },
+        "6": {
+          "cantidad": 150,
+          "proporcion": 0.0265
+        }
+      }
+    }
+  }
+}

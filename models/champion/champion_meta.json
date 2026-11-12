@@ -1,0 +1,9 @@
+{
+  "win_rate": 0.92,
+  "mean_max_x": 6039.5,
+  "wins_total": 46,
+  "episodes_total": 50,
+  "nota": "tasa de evaluacion (50 episodios estocasticos), JUMP_POWER=4.8",
+  "run_name": "run_v9",
+  "promoted_at": "2026-11-11T19:55:02"
+}

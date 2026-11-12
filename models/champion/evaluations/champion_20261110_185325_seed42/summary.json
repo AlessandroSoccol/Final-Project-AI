@@ -1,0 +1,80 @@
+{
+  "proyecto": "Final-Project-AI / Mario",
+  "algoritmo": "PPO",
+  "modelo": "C:\\Users\\alsoc\\OneDrive - Universidad EAFIT\\Semestre 5\\Inteligencia Artificial\\Super-AI-bruh\\models\\champion\\champion.zip",
+  "corrida": "champion",
+  "config_entrenamiento": {},
+  "config_evaluacion": {
+    "episodios_por_agente": 20,
+    "seed_base": 42,
+    "frame_skip": 4,
+    "max_steps": 3000,
+    "ppo_deterministico": false,
+    "baseline_aleatoria": false,
+    "recompensas_sin_normalizacion": true
+  },
+  "resumen": {
+    "PPO": {
+      "episodios": 20,
+      "victorias": 17,
+      "muertes": 3,
+      "truncados": 0,
+      "otros": 0,
+      "tasa_victorias": 0.85,
+      "ic_95_tasa_victorias_wilson": [
+        0.6396,
+        0.9476
+      ],
+      "recompensa": {
+        "media": 13676.0247,
+        "desviacion_estandar": 2547.9216
+      },
+      "avance_maximo_px": {
+        "media": 6027.75,
+        "desviacion_estandar": 914.9365
+      },
+      "pasos": {
+        "media": 547.1,
+        "desviacion_estandar": 90.7895
+      },
+      "monedas": {
+        "media": 1.7,
+        "desviacion_estandar": 0.9234
+      },
+      "puntuacion": {
+        "media": 5490.0,
+        "desviacion_estandar": 2367.0768
+      },
+      "acciones": {
+        "0": {
+          "cantidad": 1109,
+          "proporcion": 0.1014
+        },
+        "1": {
+          "cantidad": 189,
+          "proporcion": 0.0173
+        },
+        "2": {
+          "cantidad": 283,
+          "proporcion": 0.0259
+        },
+        "3": {
+          "cantidad": 3894,
+          "proporcion": 0.3559
+        },
+        "4": {
+          "cantidad": 4419,
+          "proporcion": 0.4039
+        },
+        "5": {
+          "cantidad": 1014,
+          "proporcion": 0.0927
+        },
+        "6": {
+          "cantidad": 34,
+          "proporcion": 0.0031
+        }
+      }
+    }
+  }
+}

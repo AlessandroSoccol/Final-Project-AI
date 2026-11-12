@@ -48,8 +48,14 @@ def parse_args() -> argparse.Namespace:
         help="Sobrescribe max_steps del entrenamiento (por defecto lee config.json).",
     )
     parser.add_argument(
-        "--stochastic", action="store_true",
-        help="Muestrea la politica PPO en vez de usar la accion mas probable.",
+        "--deterministic", action="store_true",
+        help="Usar siempre la accion mas probable. Por defecto se MUESTREA la "
+             "politica (estocastico), que es como el agente sabe jugar: en "
+             "modo determinista tiende a atascarse en puntos de timing fino.",
+    )
+    parser.add_argument(
+        "--render", action="store_true",
+        help="Abre una ventana y muestra al agente jugando en tiempo real.",
     )
     parser.add_argument(
         "--baseline-random", action="store_true",
@@ -78,6 +84,13 @@ def resolve_model_path(requested: Path | None) -> Path:
             raise FileNotFoundError(f"Modelo no encontrado: {candidate}")
         return candidate
 
+    # Por defecto cargamos el CAMPEON GLOBAL: el mejor modelo historico, que
+    # deberia ser capaz de pasar el nivel.
+    champion = MODELS_DIR / "champion" / "champion.zip"
+    if champion.is_file():
+        return champion
+
+    # Sin campeon aun, caemos al mejor modelo de la corrida mas reciente.
     candidates = list(MODELS_DIR.glob("*/best_model.zip"))
     candidates += list(MODELS_DIR.glob("*/final_model.zip"))
     if not candidates:
@@ -103,9 +116,12 @@ def read_training_config(model_path: Path) -> tuple[dict, Path]:
     return {}, model_path.parent
 
 
-def make_evaluation_env(frame_skip: int, max_steps: int, run_dir: Path):
+def make_evaluation_env(frame_skip: int, max_steps: int, run_dir: Path,
+                        render: bool = False):
+    render_mode = "human" if render else None
     env = DummyVecEnv([
-        lambda: MarioEnv(frame_skip=frame_skip, max_steps=max_steps)
+        lambda: MarioEnv(frame_skip=frame_skip, max_steps=max_steps,
+                         render_mode=render_mode)
     ])
 
     stats_path = run_dir / "vecnormalize.pkl"
@@ -279,7 +295,9 @@ def main() -> int:
     print(f"[evaluate] Episodios: {args.episodes}, seed: {args.seed}, "
           f"frame_skip: {frame_skip}, max_steps: {max_steps}")
     model = PPO.load(str(model_path), device="cpu")
-    env = make_evaluation_env(frame_skip, max_steps, run_dir)
+    env = make_evaluation_env(frame_skip, max_steps, run_dir, render=args.render)
+    if args.render:
+        print("[evaluate] Modo ventana activo: veras al agente jugar en tiempo real.")
     try:
         if (model.observation_space != env.observation_space
                 or model.action_space != env.action_space):
@@ -288,7 +306,7 @@ def main() -> int:
 
         ppo_rows, ppo_actions = run_episodes(
             env, model, "PPO", args.episodes, args.seed,
-            deterministic=not args.stochastic,
+            deterministic=args.deterministic,
         )
         all_rows = list(ppo_rows)
         summaries = {"PPO": summarize(ppo_rows, ppo_actions)}
@@ -313,7 +331,7 @@ def main() -> int:
             "seed_base": args.seed,
             "frame_skip": frame_skip,
             "max_steps": max_steps,
-            "ppo_deterministico": not args.stochastic,
+            "ppo_deterministico": args.deterministic,
             "baseline_aleatoria": args.baseline_random,
             "recompensas_sin_normalizacion": True,
         },

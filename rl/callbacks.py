@@ -116,6 +116,25 @@ class MarioMetricsCallback(BaseCallback):
 
         return True
 
+    def current_metrics(self) -> dict:
+        """
+        Resumen de las metricas recientes, usado por train.py para decidir si
+        la corrida merece convertirse en el campeon global.
+
+        win_rate y mean_max_x se calculan sobre la ventana movil; los totales
+        son acumulados de toda la corrida.
+        """
+        win_rate = float(np.mean(self._recent_wins)) if self._recent_wins else 0.0
+        mean_max_x = float(np.mean(self._recent_max_x)) if self._recent_max_x else 0.0
+        return {
+            "win_rate": win_rate,
+            "mean_max_x": mean_max_x,
+            "wins_total": int(self.wins_total),
+            "deaths_total": int(self.deaths_total),
+            "episodes_total": int(self.episodes_total),
+            "window": self.window,
+        }
+
     def _record_to_tensorboard(self):
         if len(self._recent_max_x) == 0:
             return
@@ -251,11 +270,19 @@ def make_callbacks(
     progress_freq : cada cuantos pasos se imprime el resumen en consola.
     window : tamano de la ventana movil para las metricas promediadas.
     verbose : nivel de verbosidad de los callbacks.
+
+    Devuelve
+    --------
+    (callbacks, metrics_cb) : la CallbackList lista para model.learn(...) y la
+    referencia al MarioMetricsCallback, para que train.py pueda leer las
+    metricas finales (win_rate, avance) y decidir la promocion a campeon.
     """
     os.makedirs(save_path, exist_ok=True)
 
-    return CallbackList([
-        MarioMetricsCallback(window=window, verbose=verbose),
+    metrics_cb = MarioMetricsCallback(window=window, verbose=verbose)
+
+    callbacks = CallbackList([
+        metrics_cb,
         TrainingProgressCallback(
             log_freq=progress_freq, window=window, verbose=verbose
         ),
@@ -272,3 +299,4 @@ def make_callbacks(
             verbose=verbose,
         ),
     ])
+    return callbacks, metrics_cb

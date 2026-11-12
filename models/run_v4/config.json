@@ -1,0 +1,35 @@
+{
+  "timesteps": 3000000,
+  "n_envs": 8,
+  "seed": 0,
+  "frame_skip": 4,
+  "max_steps": 3000,
+  "run_name": "run_v4",
+  "resume": null,
+  "no_norm_reward": false,
+  "no_champion": false,
+  "ppo_params": {
+    "learning_rate": 0.00025,
+    "n_steps": 512,
+    "batch_size": 256,
+    "n_epochs": 10,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.03,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5
+  },
+  "policy_kwargs": {
+    "net_arch": {
+      "pi": [
+        64,
+        64
+      ],
+      "vf": [
+        64,
+        64
+      ]
+    }
+  }
+}
