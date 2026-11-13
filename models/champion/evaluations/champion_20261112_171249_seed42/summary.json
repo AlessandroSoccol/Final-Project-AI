@@ -1,0 +1,142 @@
+{
+  "proyecto": "Final-Project-AI / Mario",
+  "algoritmo": "PPO",
+  "modelo": "C:\\Users\\alsoc\\OneDrive - Universidad EAFIT\\Semestre 5\\Inteligencia Artificial\\Super-AI-bruh\\models\\champion\\champion.zip",
+  "corrida": "champion",
+  "config_entrenamiento": {},
+  "config_evaluacion": {
+    "episodios_por_agente": 50,
+    "seed_base": 42,
+    "frame_skip": 4,
+    "max_steps": 3000,
+    "ppo_deterministico": false,
+    "baseline_aleatoria": true,
+    "recompensas_sin_normalizacion": true
+  },
+  "resumen": {
+    "PPO": {
+      "episodios": 50,
+      "victorias": 46,
+      "muertes": 4,
+      "truncados": 0,
+      "otros": 0,
+      "tasa_victorias": 0.92,
+      "ic_95_tasa_victorias_wilson": [
+        0.8116,
+        0.9685
+      ],
+      "recompensa": {
+        "media": 14121.9347,
+        "desviacion_estandar": 2698.4889
+      },
+      "avance_maximo_px": {
+        "media": 6039.54,
+        "desviacion_estandar": 1009.577
+      },
+      "pasos": {
+        "media": 530.2,
+        "desviacion_estandar": 89.1582
+      },
+      "monedas": {
+        "media": 2.84,
+        "desviacion_estandar": 0.8172
+      },
+      "puntuacion": {
+        "media": 6160.0,
+        "desviacion_estandar": 1733.3464
+      },
+      "acciones": {
+        "0": {
+          "cantidad": 2120,
+          "proporcion": 0.08
+        },
+        "1": {
+          "cantidad": 281,
+          "proporcion": 0.0106
+        },
+        "2": {
+          "cantidad": 452,
+          "proporcion": 0.0171
+        },
+        "3": {
+          "cantidad": 11043,
+          "proporcion": 0.4166
+        },
+        "4": {
+          "cantidad": 10061,
+          "proporcion": 0.3795
+        },
+        "5": {
+          "cantidad": 2389,
+          "proporcion": 0.0901
+        },
+        "6": {
+          "cantidad": 164,
+          "proporcion": 0.0062
+        }
+      }
+    },
+    "aleatorio": {
+      "episodios": 50,
+      "victorias": 0,
+      "muertes": 50,
+      "truncados": 0,
+      "otros": 0,
+      "tasa_victorias": 0.0,
+      "ic_95_tasa_victorias_wilson": [
+        0.0,
+        0.0714
+      ],
+      "recompensa": {
+        "media": 1708.905,
+        "desviacion_estandar": 728.5804
+      },
+      "avance_maximo_px": {
+        "media": 1015.94,
+        "desviacion_estandar": 367.2661
+      },
+      "pasos": {
+        "media": 326.94,
+        "desviacion_estandar": 167.5713
+      },
+      "monedas": {
+        "media": 0.76,
+        "desviacion_estandar": 0.6247
+      },
+      "puntuacion": {
+        "media": 362.0,
+        "desviacion_estandar": 415.9523
+      },
+      "acciones": {
+        "0": {
+          "cantidad": 2338,
+          "proporcion": 0.143
+        },
+        "1": {
+          "cantidad": 2345,
+          "proporcion": 0.1435
+        },
+        "2": {
+          "cantidad": 2330,
+          "proporcion": 0.1425
+        },
+        "3": {
+          "cantidad": 2359,
+          "proporcion": 0.1443
+        },
+        "4": {
+          "cantidad": 2366,
+          "proporcion": 0.1447
+        },
+        "5": {
+          "cantidad": 2356,
+          "proporcion": 0.1441
+        },
+        "6": {
+          "cantidad": 2253,
+          "proporcion": 0.1378
+        }
+      }
+    }
+  }
+}

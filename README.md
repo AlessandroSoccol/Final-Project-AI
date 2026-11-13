@@ -31,14 +31,15 @@ juego y en las recompensas obtenidas.
 
 El valor del trabajo no reside solo en que el personaje alcance la meta, sino en
 el proceso completo que lo hace posible: la integración de un juego preexistente
-con las herramientas estándar de aprendizaje por refuerzo (Gymnasium) **sin
-modificar su código fuente**, el diseño de una función de recompensa que evite
-inducir comportamientos degenerados, y el desarrollo de una metodología de
-diagnóstico para identificar las causas del estancamiento del agente. Cabe
-destacar que uno de los hallazgos más relevantes no fue de naturaleza algorítmica,
-sino del propio juego: se identificó un obstáculo insuperable con la física
-original. En conjunto, el proyecto ofrece una base sólida y reproducible para
-experimentar con el diseño de recompensas y con la representación del estado.
+con las herramientas estándar de aprendizaje por refuerzo (Gymnasium)
+**modificando una única constante física del juego**, el diseño de una función de
+recompensa que evite inducir comportamientos degenerados, y el desarrollo de una
+metodología de diagnóstico para identificar las causas del estancamiento del
+agente. Cabe destacar que uno de los hallazgos más relevantes no fue de naturaleza
+algorítmica, sino del propio juego: se identificó un obstáculo insuperable con la
+física original. En conjunto, el proyecto ofrece una base sólida y reproducible
+para experimentar con el diseño de recompensas y con la representación del estado.
+
 ## 2. Objetivo
 
 **General:** Entrenar un agente de RL capaz de completar el nivel 1-1 de Super
@@ -46,10 +47,12 @@ Mario Bros de forma autónoma.
 
 **Específicos:**
 
-1. Construir un entorno Gymnasium que envuelva el juego Pygame sin alterar su
-   código, operable headless y de forma determinista.
-2. Diseñar una función de recompensa que induzca avance sostenido hacia la meta
-   y penalice el tiempo, evitando que la política colapse a estrategias pasivas.
+1. Construir un entorno Gymnasium que envuelva el juego Pygame, operable
+   headless y de forma determinista, que permita entrenar 3 millones de pasos
+   con 8 entornos en paralelo en menos de 30 minutos en CPU.
+2. Diseñar una función de recompensa con la que el agente avance en promedio
+   al menos el 90 % del nivel (≥ 5 700 px de los ≈ 6 336 px hasta la bandera),
+   evitando que la política colapse a estrategias pasivas.
 3. Alcanzar una tasa de victorias (llegar a la bandera) ≥ 30 % en evaluación
    sobre episodios independientes.
 
@@ -70,6 +73,12 @@ recompensa). La "fuente de datos" es el propio juego, muestreado en cada paso.
 **Acciones** — 7 discretas: nada, derecha, derecha+salto, derecha+correr,
 derecha+correr+salto, salto, izquierda.
 
+**Tamaño y formato:** cada transición es un vector `float32` de 132 valores, una
+acción entera (0–6) y una recompensa escalar. El agente final se entrenó con
+**3 millones de transiciones** (8 entornos en paralelo) y se evaluó con **50
+episodios** independientes por agente, guardados en `episodes.csv` (una fila por
+episodio) y `summary.json` (resumen).
+
 **Preprocesamiento:** los escalares se normalizan a rangos comparables; las
 grillas se construyen centradas en Mario desde la estructura interna del mapa y
 la lista de mobs del juego. El tiempo del juego se simula con un reloj
@@ -80,8 +89,15 @@ sin ventana ni audio.
 tiles (128 px) que supera la altura de salto base de Mario (≈101 px con el valor
 original `JUMP_POWER=4.3`); el salto base solo corona ese tubo rebotando sobre un
 enemigo. Para hacer el nivel superable de forma fiable por el agente se ajustó la
-constante física `JUMP_POWER` (ver Metodología). El entorno depende de los
-recursos del juego (`game/MarioPygame/Next/`), que conservan su licencia original.
+constante física `JUMP_POWER` (ver Metodología). Además, el agente se entrena y
+evalúa en un único nivel (1-1), por lo que no se puede afirmar que generalice a
+otros niveles.
+
+**Licencia y restricciones de uso:** el código de `rl/` fue desarrollado por el
+equipo con fines académicos. El juego (`game/MarioPygame/Next/`) es un clon de
+código abierto de terceros y conserva la licencia de su repositorio original.
+*Super Mario Bros* es una marca registrada de Nintendo; este proyecto es de uso
+exclusivamente académico y sin fines comerciales.
 
 ## 4. Metodología
 
@@ -126,6 +142,13 @@ recursos del juego (`game/MarioPygame/Next/`), que conservan su licencia origina
   de una imposibilidad física. En consecuencia, se elevó la fuerza de salto hasta un
   valor que permite superar el obstáculo (129 px). Fue la única constante del juego
   modificada, y únicamente tras descartar que el problema fuera de aprendizaje.
+- **Métricas.** La métrica principal es la **tasa de victorias** (episodios que
+  llegan a la bandera), porque responde directamente al objetivo. Se reporta con
+  un intervalo de confianza de Wilson al 95 %, que es más fiable que el intervalo
+  normal con pocos episodios y tasas cercanas a 0 % o 100 %. Se complementa con el
+  **avance máximo medio** (px), que muestra progreso aunque el agente aún no gane,
+  y con la recompensa media. La comparación se hace contra un **agente aleatorio**
+  con las mismas semillas, que sirve de línea base.
 
 **Función de recompensa:**
 
@@ -135,19 +158,33 @@ recursos del juego (`game/MarioPygame/Next/`), que conservan su licencia origina
 | Récord de avance | `(x − máx) × 1.0` | premia terreno nuevo (rompe el quedarse quieto) |
 | Tiempo | `−0.1` / paso | incentiva terminar rápido |
 | Estancamiento | `−0.05` / paso + corte a 120 | penaliza no progresar |
-| Puntuación | `Δscore × 0.01` | matar enemigos, monedas, hongo |
+| Puntuación | `Δscore × 0.05` | matar enemigos, monedas, hongo |
 | Bloque power-up | `+15` por bloque | favorece golpear cajas de hongo/flor |
 | Victoria | `+500 + tiempo_restante × 5` | meta + bono por rapidez |
 | Muerte | `−50` | castigo moderado (no paraliza) |
 
-**Hiperparámetros clave:** `learning_rate=2.5e-4`, `n_steps=512`,
-`batch_size=256`, `gamma=0.99`, `gae_lambda=0.95`, `clip_range=0.2`,
-`ent_coef=0.03` (exploración elevada para evitar colapso de la política),
-`frame_skip=4`, 8 entornos paralelos.
+**Hiperparámetros clave y su justificación:**
+
+| Parámetro | Valor | Justificación |
+|---|---|---|
+| `learning_rate` | 2.5e-4 | Valor estándar de PPO en juegos; aprende sin cambios bruscos. |
+| `n_steps` | 512 | Pasos por entorno antes de actualizar: 512 × 8 = 4 096 transiciones por actualización. |
+| `batch_size` | 256 | Mini-lotes de 256 → 16 mini-lotes por actualización. |
+| `gamma` | 0.99 | Valora recompensas lejanas (la bandera está a cientos de pasos). |
+| `gae_lambda` | 0.95 | Equilibrio estándar entre sesgo y varianza al estimar la ventaja. |
+| `clip_range` | 0.2 | Limita cuánto cambia la política por actualización; da estabilidad. |
+| `ent_coef` | 0.03 | Más exploración que el valor típico (0.01), porque la política colapsaba a una sola acción. |
+| Red | 64×64 (actor y crítico) | La entrada es un vector de 132 valores; una red pequeña basta y entrena rápido en CPU. |
+| `frame_skip` | 4 | Repite cada acción 4 ticks: menos decisiones por segundo sin perder control. |
+| Entornos | 8 en paralelo | Recolecta experiencia 8 veces más rápido; cada uno en su propio proceso. |
 
 **Diagrama de flujo metodológico:**
 
-![Diagrama](docs/images/diagrama.png)
+![Diagrama de flujo metodológico](docs/images/diagrama.png)
+
+*Figura 1. Pipeline de principio a fin. Azul: juego y entorno; verde: PPO y
+entrenamiento; rombo: decisión de promover al campeón global; morado y gris:
+dónde se guarda el modelo; naranja: evaluación y gráficas.*
 
 ## 5. Diagrama de interacción (UML)
 
@@ -158,35 +195,15 @@ y, a partir de ese momento, es él quien controla al personaje. El siguiente
 diagrama detalla la interacción entre el usuario, el modelo y el juego a lo largo
 del tiempo.
 
-```mermaid
-sequenceDiagram
-    actor U as Usuario
-    participant W as watch.py / evaluate.py
-    participant M as Modelo PPO (campeón)
-    participant E as MarioEnv
-    participant G as Juego (Core)
+![Diagrama de secuencia UML](docs/images/diagrama2.png)
 
-    U->>W: Ejecuta el comando
-    W->>M: Carga models/champion/champion.zip
-    W->>E: reset()
-    E->>G: inicia nivel 1-1 (headless o ventana)
-    E-->>W: observación inicial (132-d)
-    loop cada paso hasta fin del episodio
-        W->>M: predict(observación)
-        M-->>W: acción (0..6)
-        W->>E: step(acción)
-        E->>G: aplica flags + avanza ticks
-        G-->>E: nuevo estado (pos, mobs, score, fin)
-        E-->>W: observación, recompensa, terminado
-    end
-    E-->>W: resultado (victoria / muerte, avance, score)
-    W-->>U: muestra gameplay y/o estadísticas
-```
+*Figura 2. Diagrama de secuencia del agente entrenado en uso (inferencia). Flechas
+llenas: llamadas; flechas punteadas: respuestas.*
 
 ## 6. Resultados
 
 La tabla compara las tres grandes etapas del proyecto, para que se vea de un
-vistazo cómo fue cambiando el agente a medida que arreglábamos las cosas. La
+vistazo cómo fue cambiando el agente a medida que se corrigieron los problemas. La
 última columna es el agente final (`JUMP_POWER=4.8`, recompensa completa con
 incentivo de puntuación y el agente viendo a los enemigos), entrenado los 3
 millones de pasos completos.
@@ -216,6 +233,9 @@ capacidad de *avanzar* y solo en una fase posterior la de *completar* el nivel.
 
 ![Curva de aprendizaje del agente final](rl/figuras/run_v9_1/curva_aprendizaje.png)
 
+*Figura 3. Curva de aprendizaje de `run_v9`: % de avance hacia la meta (azul) y %
+de episodios que completan el nivel (verde) contra los pasos de entrenamiento.*
+
 Las figuras de la evaluación (avance y recompensa por episodio, distribución de
 resultados y comparación contra la línea base) se generan en
 `rl/figuras/<evaluación>/`, y la curva de aprendizaje en
@@ -242,129 +262,89 @@ resultados y comparación contra la línea base) se generan en
   decisiones (modo estocástico, coherente con el entrenamiento), la tasa ascendía al
   92 %. Este fenómeno es esperable: la superación de ciertos obstáculos exige variar
   la sincronización de las acciones, mientras que una política completamente rígida
-  reproduce el mismo error de forma reiterada.
-  Por eso tanto la evaluación como la visualización usan el modo estocástico por
-  defecto.
-- **Reproducir estos números:**
-  ```
-  ./.venv/Scripts/python.exe rl/evaluate.py --episodes 50 --baseline-random
-  ./.venv/Scripts/python.exe rl/plot_eval.py
-  ```
+  reproduce el mismo error de forma reiterada. Por eso tanto la evaluación como la
+  visualización usan el modo estocástico por defecto.
+- **Reproducir estos números:** ver los pasos 4 y 5 de la sección 7.
 
 ## 7. Reproducibilidad
 
-**Requisitos e instalación:**
+**Requisitos:** Python 3.10 o superior. Dependencias principales: `pygame`,
+`pytmx`, `gymnasium`, `numpy`, `torch`, `stable-baselines3`, `tensorboard`,
+`matplotlib` (todas en `requirements.txt`).
 
-```
-# Crear y activar un entorno virtual, luego:
-pip install -r requirements.txt
-```
-
-Dependencias principales: `pygame`, `pytmx`, `gymnasium`, `numpy`, `torch`,
-`stable-baselines3`, `tensorboard`, `matplotlib`.
-
-**Comandos mínimos** (desde la raíz del proyecto, con el Python del entorno):
-
-```
-# Entrenar un agente (crea models/<run-name>/ y promueve al campeón al terminar)
-python rl/train.py --timesteps 3000000 --n-envs 8 --run-name final
-
-# Ver al campeón jugar en una ventana
-python rl/watch.py
-
-# Evaluar con estadísticas, comparando contra un agente aleatorio
-python rl/evaluate.py --episodes 50 --baseline-random
-
-# Graficar los resultados de la evaluación (-> rl/figuras/<evaluación>/)
-python rl/plot_eval.py
-
-# Graficar la curva de aprendizaje de una corrida (eje X logarítmico)
-python rl/plot_training.py --run final_1
-
-# Ver curvas de entrenamiento
-python -m tensorboard.main --logdir runs
-```
-
-> En Windows con el venv del repo, reemplazar `python` por
-> `./.venv/Scripts/python.exe`.
-
-**Estructura del repositorio:**
-
-```
-Super-AI-bruh/
-├── game/MarioPygame/Next/   # Juego Pygame (no modificar, salvo JUMP_POWER justificado)
-├── rl/                      # Código de Reinforcement Learning
-│   ├── mario_env.py         # Entorno Gymnasium que envuelve el juego
-│   ├── train.py             # Entrenamiento PPO + promoción de campeón
-│   ├── evaluate.py          # Evaluación con estadísticas (CSV + JSON)
-│   ├── watch.py             # Ver al agente jugar en ventana
-│   ├── plot_eval.py         # Gráficas de la evaluación
-│   ├── plot_training.py     # Curva de aprendizaje (avance y éxito vs pasos, log)
-│   ├── callbacks.py         # Métricas, checkpoints, mejor modelo
-│   ├── champion.py          # Lógica del campeón global
-│   └── figuras/             # Salida de las gráficas (una subcarpeta por corrida)
-├── models/                  # Modelos entrenados (champion/ + run_x/)
-├── runs/                    # Logs de TensorBoard
-└── requirements.txt
-```
-
-## 8. Instructivo de ejecución (paso a paso)
-
-Guía para ejecutar el proyecto de principio a fin. Todos los comandos se lanzan
-**desde la raíz del proyecto**. En Windows con el entorno del repo, usa
-`./.venv/Scripts/python.exe` en lugar de `python`.
+**Instructivo paso a paso.** Todos los comandos se lanzan **desde la raíz del
+proyecto**, con el entorno virtual activado. En Windows, si el entorno no está
+activado, usa `./.venv/Scripts/python.exe` en lugar de `python`.
 
 **Paso 0 — Preparar el entorno (una sola vez).**
-Instala las dependencias en un entorno virtual:
 ```
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**Paso 1 — Entrenar al agente.**
-Crea `models/<run-name>/` y, al terminar, lo compara con el campeón global y lo
-promueve si es mejor. Ajusta `--run-name` a tu gusto (debe ser único por corrida):
+**Paso 1 — Entrenar al agente.** Crea `models/<run-name>/` y, al terminar, lo
+compara con el campeón global y lo promueve si es mejor. `--run-name` debe ser
+único por corrida:
 ```
 python rl/train.py --timesteps 3000000 --n-envs 8 --run-name final
 ```
-> Tarda ~25-30 min. Si quieres solo probar que todo funciona, usa un valor
-> pequeño como `--timesteps 50000` (el agente no jugará bien, pero verifica el
-> flujo).
+> Tarda ~25-30 min. Para solo probar que todo funciona, usa
+> `--timesteps 50000 --no-champion` (el agente no jugará bien, pero verifica el
+> flujo sin tocar al campeón).
 
-**Paso 2 — (Opcional) Seguir el entrenamiento en vivo.**
-Mientras entrena, en otra terminal, abre TensorBoard y entra a
-`http://localhost:6006`:
+**Paso 2 — (Opcional) Seguir el entrenamiento en vivo** en otra terminal, y
+entrar a `http://localhost:6006`:
 ```
 python -m tensorboard.main --logdir runs
 ```
 
-**Paso 3 — Ver al campeón jugar.**
-Abre la ventana del juego con el mejor agente jugando solo (modo estocástico por
-defecto, que es como juega bien):
+**Paso 3 — Ver al campeón jugar** en una ventana (modo estocástico por defecto,
+que es como juega bien):
 ```
 python rl/watch.py
 ```
 
-**Paso 4 — Evaluar el rendimiento.**
-Hace jugar al campeón 50 partidas independientes y lo compara contra un agente
-aleatorio. Escribe `episodes.csv` y `summary.json`:
+**Paso 4 — Evaluar el rendimiento.** Hace jugar al campeón 50 partidas
+independientes y lo compara contra un agente aleatorio. Escribe `episodes.csv` y
+`summary.json`:
 ```
 python rl/evaluate.py --episodes 50 --baseline-random
 ```
 
-**Paso 5 — Graficar los resultados de la evaluación.**
-Lee la evaluación más reciente del paso 4 y genera las figuras en
-`rl/figuras/<evaluación>/`:
+**Paso 5 — Graficar los resultados de la evaluación** (lee la evaluación más
+reciente y genera las figuras en `rl/figuras/<evaluación>/`):
 ```
 python rl/plot_eval.py
 ```
 
-**Paso 6 — Graficar la curva de aprendizaje.**
-Dibuja cómo subieron el % de avance y el % de éxito durante el entrenamiento
-(eje X logarítmico). Sustituye `final_1` por el nombre de tu corrida en `runs/`:
+**Paso 6 — Graficar la curva de aprendizaje** de una corrida (eje X
+logarítmico). Sustituye `final_1` por el nombre de la corrida en `runs/`:
 ```
 python rl/plot_training.py --run final_1
 ```
 
 **Resumen del orden:** `instalar → entrenar → (ver) → evaluar → graficar`. Los
-pasos 1 y 4 generan los artefactos (modelo y datos); los demás solo los
-consumen, así que requieren que sus pasos previos se hayan ejecutado.
+pasos 1 y 4 generan los artefactos (modelo y datos); los demás solo los consumen.
+
+**Estructura del repositorio:**
+
+```
+Super-AI-bruh/
+├── game/MarioPygame/Next/   # Juego Pygame (solo se modificó JUMP_POWER)
+├── rl/                      # Código de Reinforcement Learning
+│   ├── mario_env.py         # Entorno Gymnasium que envuelve el juego
+│   ├── train.py             # Entrenamiento PPO + promoción de campeón
+│   ├── callbacks.py         # Métricas, checkpoints, mejor modelo
+│   ├── champion.py          # Lógica del campeón global
+│   ├── evaluate.py          # Evaluación con estadísticas (CSV + JSON)
+│   ├── watch.py             # Ver al agente jugar en ventana
+│   ├── plot_eval.py         # Gráficas de la evaluación
+│   ├── plot_training.py     # Curva de aprendizaje (avance y éxito vs pasos, log)
+│   └── figuras/             # Salida de las gráficas (una subcarpeta por corrida)
+├── models/                  # Modelos entrenados (champion/ + run_x/)
+├── runs/                    # Logs de TensorBoard
+├── docs/images/             # Diagramas del README
+├── requirements.txt
+└── .gitignore
+```
